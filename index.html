@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Agent Dashboard & Opencode Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .left-panel {
+      width: 45%;
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+    .right-panel {
+      width: 55%;
+      background: #000000;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+    h2 { color: #38bdf8; margin-top: 0; }
+    .card { background: #0f172a; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; border: 1px solid #334155; }
+    .status { font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; font-size: 0.75rem; text-transform: uppercase; }
+    .status.working { background: #0284c7; color: white; }
+    .status.ready, .status.idle { background: #16a34a; color: white; }
+    #terminal-container { flex: 1; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="left-panel">
+    <h2>🧭 Agent Dashboard</h2>
+    <div id="agents">Loading agents...</div>
+    <h3>Activity Log</h3>
+    <div id="logs" style="font-size: 0.85rem; color: #94a3b8;">Loading logs...</div>
+  </div>
+  <div class="right-panel">
+    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">⚡ Opencode Terminal</div>
+    <div id="terminal-container"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // Initialize xterm.js
+    const term = new Terminal({
+      cursorBlink: true,
+      theme: { background: '#000000', foreground: '#f8fafc' }
+    });
+    term.open(document.getElementById('terminal-container'));
+
+    term.onData((data) => {
+      ipcRenderer.send('terminal-input', data);
+    });
+
+    ipcRenderer.on('terminal-output', (event, data) => {
+      term.write(data);
+    });
+
+    // Fetch Dashboard State
+    async function refreshDashboard() {
+      try {
+        const res = await fetch('http://localhost:3030/api/state');
+        const data = await res.json();
+
+        document.getElementById('agents').innerHTML = (data.agents || []).map(a => `
+          <div class="card">
+            <strong>${a.name}</strong> <span class="status ${a.status}">${a.status}</span>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">${a.currentTask}</p>
+          </div>
+        `).join('');
+
+        document.getElementById('logs').innerHTML = (data.activityLog || []).slice(0, 15).map(l => `
+          <div style="border-bottom: 1px solid #1e293b; padding: 0.3rem 0;">
+            [${new Date(l.timestamp).toLocaleTimeString()}] <strong>${l.agentId}:</strong> ${l.message}
+          </div>
+        `).join('');
+      } catch (e) {
+        // server starting up
+      }
+    }
+
+    refreshDashboard();
+    setInterval(refreshDashboard, 2000);
+  </script>
+</body>
+</html>
